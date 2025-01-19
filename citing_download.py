@@ -11,6 +11,9 @@ from playwright.async_api import (
     TimeoutError
 )
 
+from login import LoginManager  # Import LoginManager from login.py
+
+# Load environment variables
 load_dotenv()
 
 SCOPUS_USERNAME = os.getenv("SCOPUS_USERNAME")
@@ -24,12 +27,6 @@ CHUNK_SIZE = 100
 
 # Configure global logging
 LOG_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
-logging.basicConfig(
-    filename=LOG_FILE_PATH,
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
 
 
 def query_parser(s, parsing_enabled):
@@ -40,16 +37,21 @@ def query_parser(s, parsing_enabled):
 
 
 class CitingDocumentsScraper:
-    def __init__(self):
+    def __init__(self, login_manager: LoginManager):
+        # Initialize logger for this module
+        self.logger = logging.getLogger(__name__)
+
         if not SCOPUS_USERNAME or not SCOPUS_PASSWORD:
             raise ValueError("SCOPUS_USERNAME or SCOPUS_PASSWORD not set in environment.")
         
         self.all_pairs = []
 
+        self.login_manager = login_manager
+
     def discover_all_pairs(self):
         base_path = Path(MISCITED_DOWNLOADS_DIR)
         if not base_path.exists():
-            logging.error(f"No '{MISCITED_DOWNLOADS_DIR}' folder found. Nothing to do.")
+            self.logger.error(f"No '{MISCITED_DOWNLOADS_DIR}' folder found. Nothing to do.")
             return
         
         for subfolder in base_path.iterdir():
@@ -70,10 +72,15 @@ class CitingDocumentsScraper:
                             "MiscitedEID": miscited_eid
                         })
         
-        logging.info(f"Discovered {len(self.all_pairs)} (CitedEID, MiscitedEID) pairs total.")
+        self.logger.info(f"Discovered {len(self.all_pairs)} (CitedEID, MiscitedEID) pairs total.")
 
     async def login_and_get_context(self, playwright):
+        """
+        Launch a Chromium browser in headless mode, add saved cookies to the context,
+        and verify if the session is still valid. If not, perform re-login.
+        """
         browser = await playwright.chromium.launch(headless=True)
+
         context = await browser.new_context(
             user_agent=(
                 "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -81,28 +88,16 @@ class CitingDocumentsScraper:
                 "Chrome/125.0.0.0 Safari/537.36"
             )
         )
-        page = await context.new_page()
-        login_url = (
-            "https://lbapp01.lib.cityu.edu.hk/ezlogin/index.aspx?"
-            "url=https%3a%2f%2fwww.scopus.com"
-        )
-        redirect_url_pattern = "https://www-scopus-com.ezproxy.cityu.edu.hk/**"
 
-        logging.info("[Login] Navigating to the login page...")
-        await page.goto(login_url)
+        try:
+            cookies = await self.login_manager.relogin_and_reload_cookies()
+            await context.add_cookies(cookies)
+            self.logger.info("Cookies added to Playwright context.")
 
-        logging.info("[Login] Filling in username and password...")
-        await page.fill('input[name="cred_userid_inputtext"]', SCOPUS_USERNAME)
-        await page.fill('input[name="cred_password_inputtext"]', SCOPUS_PASSWORD)
+        except Exception as e:
+            self.logger.error(f"Error loading cookies: {e}")
+            raise
 
-        logging.info("[Login] Clicking the login button...")
-        await page.click('input[value="Login"]')
-
-        logging.info("[Login] Waiting for redirect to Scopus EZproxy...")
-        await page.wait_for_url(redirect_url_pattern, timeout=60000)
-        logging.info(f"[Login] Redirected to: {page.url}")
-
-        await page.close()
         return browser, context
 
     async def scrape_single_pair(self, context: BrowserContext, pair, sem: asyncio.Semaphore):
@@ -118,12 +113,12 @@ class CitingDocumentsScraper:
                     success_file = folder_path / "success.txt"
                     empty_file = folder_path / "empty.txt"
                     if success_file.exists() or empty_file.exists():
-                        logging.info(f"[{cited_eid} -> {miscited_eid}] Folder has success/empty. Skipping re-processing.")
+                        self.logger.info(f"[{cited_eid} -> {miscited_eid}] Folder has success/empty. Skipping re-processing.")
                         return
                     else:
-                        logging.info(f"[{cited_eid} -> {miscited_eid}] Folder exists but no success/empty. Re-processing.")
+                        self.logger.info(f"[{cited_eid} -> {miscited_eid}] Folder exists but no success/empty. Re-processing.")
                 else:
-                    logging.info(f"[{cited_eid} -> {miscited_eid}] Creating folder: {folder_path}")
+                    self.logger.info(f"[{cited_eid} -> {miscited_eid}] Creating folder: {folder_path}")
                     folder_path.mkdir(parents=True, exist_ok=True)
 
                 # Build the "cited by" URL
@@ -133,37 +128,37 @@ class CitingDocumentsScraper:
                 )
 
                 page = await context.new_page()
-                logging.info(f"[{cited_eid} -> {miscited_eid}] Navigating to: {citedby_url}")
+                self.logger.info(f"[{cited_eid} -> {miscited_eid}] Navigating to: {citedby_url}")
                 await page.goto(citedby_url, wait_until="networkidle")
 
                 try:
                     # 1) Check the box
                     await page.locator("label[for='mainResults-allPageCheckBox']").dispatch_event('click')
-                    logging.info(f"[{cited_eid} -> {miscited_eid}] 'Select all' checkbox checked.")
+                    self.logger.info(f"[{cited_eid} -> {miscited_eid}] 'Select all' checkbox checked.")
 
                     # 2) Export menu
                     await page.locator("button#export_results").click()
-                    logging.info(f"[{cited_eid} -> {miscited_eid}] Export menu opened.")
+                    self.logger.info(f"[{cited_eid} -> {miscited_eid}] Export menu opened.")
 
                     # 3) Check CSV
                     await page.locator("label[for='CSV']").click()
-                    logging.info(f"[{cited_eid} -> {miscited_eid}] CSV radio selected.")
+                    self.logger.info(f"[{cited_eid} -> {miscited_eid}] CSV radio selected.")
 
                     # 4) Export trigger
                     async with page.expect_download(timeout=0) as download_info:
                         await page.locator("button#exportTrigger").click()
-                        logging.info(f"[{cited_eid} -> {miscited_eid}] Export submitted.")
+                        self.logger.info(f"[{cited_eid} -> {miscited_eid}] Export submitted.")
                     download = await download_info.value
 
                     # 5) Save CSV
                     csv_path = folder_path / f"{miscited_eid}.csv"
                     await download.save_as(str(csv_path))
-                    logging.info(f"[{cited_eid} -> {miscited_eid}] Downloaded CSV saved to {csv_path}.")
+                    self.logger.info(f"[{cited_eid} -> {miscited_eid}] Downloaded CSV saved to {csv_path}.")
 
                     # Success
                     success_file = folder_path / "success.txt"
                     success_file.touch(exist_ok=True)
-                    logging.info(f"[{cited_eid} -> {miscited_eid}] Created success.txt.")
+                    self.logger.info(f"[{cited_eid} -> {miscited_eid}] Created success.txt.")
 
                 except TimeoutError:
                     # Handle no results found
@@ -172,15 +167,15 @@ class CitingDocumentsScraper:
                         await page.wait_for_selector(no_results_selector, timeout=500)
                         empty_file = folder_path / "empty.txt"
                         empty_file.touch(exist_ok=True)
-                        logging.info(f"[{cited_eid} -> {miscited_eid}] No citing documents found. Created empty.txt.")
+                        self.logger.info(f"[{cited_eid} -> {miscited_eid}] No citing documents found. Created empty.txt.")
                     except TimeoutError:
-                        logging.error(f"[{cited_eid} -> {miscited_eid}] Unknown error occurred during processing.")
+                        self.logger.error(f"[{cited_eid} -> {miscited_eid}] Unknown error occurred during processing.")
                 except Exception as e:
-                    logging.error(f"[{cited_eid} -> {miscited_eid}] Error during export flow: {e}")
+                    self.logger.error(f"[{cited_eid} -> {miscited_eid}] Error during export flow: {e}")
                 finally:
                     await page.close()
             except Exception as e:
-                logging.error(f"[{cited_eid} -> {miscited_eid}] Unexpected error: {e}")
+                self.logger.error(f"[{cited_eid} -> {miscited_eid}] Unexpected error: {e}")
 
     async def run(self):
         self.discover_all_pairs()
@@ -188,7 +183,11 @@ class CitingDocumentsScraper:
             return
         
         async with async_playwright() as p:
-            browser, context = await self.login_and_get_context(p)
+            try:
+                browser, context = await self.login_and_get_context(p)
+            except Exception as e:
+                self.logger.critical(f"Failed to initialize browser context: {e}")
+                return
             
             total = len(self.all_pairs)
             for start_index in range(0, total, CHUNK_SIZE):
@@ -202,13 +201,13 @@ class CitingDocumentsScraper:
                 await asyncio.gather(*tasks)
 
                 self.generate_status_csv()
-                logging.info(f"[Chunk] Processed up to pair {start_index + len(chunk)}/{total}.")
+                self.logger.info(f"[Chunk] Processed up to pair {start_index + len(chunk)}/{total}.")
 
             await browser.close()
-            logging.info("All chunks completed. Browser closed.")
+            self.logger.info("All chunks completed. Browser closed.")
 
         self.generate_status_csv()
-        logging.info("Final status.csv written.")
+        self.logger.info("Final status.csv written.")
 
     def generate_status_csv(self):
         """
@@ -262,9 +261,28 @@ class CitingDocumentsScraper:
             writer.writeheader()
             writer.writerows(rows_status)
 
-        logging.info(f"[Status] Wrote {len(rows_status)} rows to {status_csv_path}")
+        self.logger.info(f"[Status] Wrote {len(rows_status)} rows to {status_csv_path}")
 
 
 if __name__ == "__main__":
-    scraper = CitingDocumentsScraper()
-    asyncio.run(scraper.run())
+    # Configure centralized logging
+    logging.basicConfig(
+        filename=LOG_FILE_PATH,
+        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    logger = logging.getLogger(__name__)
+    logger.info("Starting CitingDocumentsScraper.")
+
+    # Initialize LoginManager (no separate log file)
+    login_manager = LoginManager()
+
+    # Initialize the scraper with the login manager
+    scraper = CitingDocumentsScraper(login_manager)
+
+    # Run the scraper
+    try:
+        asyncio.run(scraper.run())
+    except Exception as e:
+        logger.critical(f"Critical error occurred: {e}")
