@@ -2,6 +2,7 @@ import csv
 import json
 import time
 import asyncio
+import logging
 from functools import partial
 from json.decoder import JSONDecodeError
 from pathlib import Path
@@ -19,6 +20,15 @@ from login import (
 
 class ScopusScraper:
     def __init__(self):
+        # Initialize logging
+        logging.basicConfig(
+            filename="eid_with_titles.log",
+            level=logging.INFO,
+            format="%(asctime)s - %(levelname)s - %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+        logging.info("ScopusScraper initialized.")
+        
         # Paths and URLs
         self.cookies_json_path = COOKIES_JSON_PATH
         self.login_url = LOGIN_URL
@@ -61,6 +71,7 @@ class ScopusScraper:
         Loads cookies from cookies.json into self.session's cookie jar.
         """
         if not Path(self.cookies_json_path).exists():
+            logging.error("Cookie file not found. Please login first.")
             raise FileNotFoundError("Cookie file not found. Please login first.")
 
         with open(self.cookies_json_path, "r", encoding="utf-8") as f:
@@ -71,7 +82,7 @@ class ScopusScraper:
             jar.set(cookie["name"], cookie["value"])
 
         self.session.cookies = jar
-        print("Cookies loaded into session.")
+        logging.info("Cookies loaded into session.")
 
     ######################################################
     # 2) RE-LOGIN (WITH COOLDOWN)
@@ -85,14 +96,14 @@ class ScopusScraper:
             # Check if we recently re-logged in
             now = time.time()
             if (now - self.last_relogin_time) < self.relogin_cooldown:
-                print("[*] Skipping re-login (cooldown not reached).")
+                logging.info("Skipping re-login (cooldown not reached).")
                 return
 
-            print("[*] Attempting to re-login via Playwright...")
+            logging.info("Attempting to re-login via Playwright...")
             await playwright_login()
             self.load_cookies_to_session()
             self.last_relogin_time = time.time()
-            print("[*] Re-login completed.")
+            logging.info("Re-login completed.")
 
     ######################################################
     # 3) LOAD EXISTING OUTPUT (IF ANY)
@@ -103,14 +114,14 @@ class ScopusScraper:
         keyed by EID. We'll skip re-fetching any EID with a non-empty/non-Error Title.
         """
         if not Path(self.output_csv_path).exists():
-            return  # nothing to load
+            return
 
         with open(self.output_csv_path, "r", encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
                 eid = row["EID"]
                 self.output_data_dict[eid] = row
-        print(f"Loaded {len(self.output_data_dict)} existing records from {self.output_csv_path}.")
+        logging.info(f"Loaded {len(self.output_data_dict)} existing records from {self.output_csv_path}.")
 
     ######################################################
     # 4) ASYNC FETCH TITLE (WITH RETRY, RE-LOGIN, AND 404 HANDLING)
@@ -128,7 +139,7 @@ class ScopusScraper:
             url = f"{self.base_doc_url}{eid}"
             last_status = None
 
-            for attempt in range(1, 6):  # up to 5 attempts
+            for attempt in range(1, 6):
                 try:
                     loop = asyncio.get_running_loop()
                     response = await loop.run_in_executor(
@@ -139,7 +150,7 @@ class ScopusScraper:
 
                     # Check 403 => re-login
                     if last_status == 403:
-                        print(f"[{eid}] Attempt {attempt}: 403 Forbidden => re-login if needed.")
+                        logging.warning(f"[{eid}] Attempt {attempt}: 403 Forbidden => re-login if needed.")
                         await self.relogin_and_reload_cookies()
                         await asyncio.sleep(1)
                         continue
@@ -149,31 +160,29 @@ class ScopusScraper:
                         try:
                             data = response.json()
                         except JSONDecodeError:
-                            print(f"[{eid}] Attempt {attempt}: JSONDecodeError => re-login if needed.")
+                            logging.error(f"[{eid}] Attempt {attempt}: JSONDecodeError.")
                             await self.relogin_and_reload_cookies()
                             await asyncio.sleep(1)
                             continue
 
                         titles = data.get("titles", [])
                         title = titles[0] if titles else "Title not found"
-                        print(f"[{eid}] => {title} (attempt {attempt})")
+                        logging.info(f"[{eid}] => {title} (attempt {attempt})")
                         return (eid, title)
                     else:
-                        # e.g. 404 or 500 or anything else
-                        print(f"[{eid}] Attempt {attempt}: HTTP {last_status}, retrying soon...")
+                        logging.warning(f"[{eid}] Attempt {attempt}: HTTP {last_status}, retrying soon...")
                         await asyncio.sleep(1)
 
                 except Exception as e:
-                    # Catch any other exceptions not covered above
-                    print(f"[{eid}] Attempt {attempt} => Error: {e}")
+                    logging.error(f"[{eid}] Attempt {attempt} => Error: {e}")
                     await asyncio.sleep(1)
 
             # If we exhausted all attempts:
             if last_status == 404:
-                print(f"[{eid}] => 404 Not Found (after 5 attempts).")
+                logging.info(f"[{eid}] => 404 Not Found (after 5 attempts).")
                 return (eid, "404 Not Found")
             else:
-                print(f"[{eid}] => Failed after 5 attempts => 'Error'")
+                logging.error(f"[{eid}] => Failed after 5 attempts => 'Error'")
                 return (eid, "Error")
 
     ######################################################
@@ -187,7 +196,7 @@ class ScopusScraper:
         4. Save partial progress after each chunk.
         """
         if not Path(self.eid_csv_path).exists():
-            print(f"CSV file '{self.eid_csv_path}' not found.")
+            logging.error(f"CSV file '{self.eid_csv_path}' not found.")
             return
 
         # Read input CSV
@@ -197,7 +206,7 @@ class ScopusScraper:
             for row in reader:
                 input_rows.append(row)
         total_input = len(input_rows)
-        print(f"Found {total_input} rows in {self.eid_csv_path}.")
+        logging.info(f"Found {total_input} rows in {self.eid_csv_path}.")
 
         # Build a list of rows we need to process
         rows_to_process = []
@@ -212,7 +221,7 @@ class ScopusScraper:
             rows_to_process.append(row)
 
         need_count = len(rows_to_process)
-        print(f"{need_count} EIDs need fetching (others are already done).")
+        logging.info(f"{need_count} EIDs need fetching (others are already done).")
 
         if not rows_to_process:
             # Nothing to do
@@ -241,10 +250,10 @@ class ScopusScraper:
                     self.output_data_dict[eid] = matching_row
 
             processed_count += len(results)
-            print(f"Processed {processed_count}/{need_count} needed EIDs. Saving partial results...")
+            logging.info(f"Processed {processed_count}/{need_count} needed EIDs. Saving partial results...")
             self.save_output_csv()
 
-        print("Finished all needed EIDs. Final save.")
+        logging.info("Finished all needed EIDs. Final save.")
         self.save_output_csv()
 
     ######################################################
@@ -267,6 +276,7 @@ class ScopusScraper:
             writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
             writer.writeheader()
             writer.writerows(all_rows)
+        logging.info(f"Output saved to {self.output_csv_path}.")
 
     ######################################################
     # 7) MAIN RUN METHOD
@@ -282,7 +292,7 @@ class ScopusScraper:
         """
         # If cookies.json doesn't exist, perform a fresh login
         if not Path(self.cookies_json_path).exists():
-            print("No cookies.json found; logging in with Playwright...")
+            logging.info("No cookies.json found; logging in with Playwright...")
             await playwright_login()
 
         # Load cookies into session

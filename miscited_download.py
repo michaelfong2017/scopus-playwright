@@ -2,6 +2,7 @@ import os
 import re
 import csv
 import asyncio
+import logging
 from pathlib import Path
 from dotenv import load_dotenv
 from playwright.async_api import (
@@ -17,8 +18,18 @@ SCOPUS_PASSWORD = os.getenv("SCOPUS_PASSWORD")
 
 INPUT_CSV_PATH = "eid_with_titles.csv"   # Must have columns: EID, Title
 DOWNLOADS_DIR = "miscited_downloads"     # Root folder for all EID folders
-MAX_CONCURRENCY = 5                    # Number of concurrent pages
+LOG_FILE_PATH = Path(DOWNLOADS_DIR) / "miscited_downloads.log"  # Single log file
+MAX_CONCURRENCY = 5                     # Number of concurrent pages
 CHUNK_SIZE = 100                        # Update status.csv after every 100 EIDs
+
+# Configure global logging
+LOG_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+logging.basicConfig(
+    filename=LOG_FILE_PATH,
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 
 
 def query_parser(s, parsing_enabled):
@@ -60,19 +71,19 @@ class MiscitedDocumentScraper:
         )
         redirect_url_pattern = "https://www-scopus-com.ezproxy.cityu.edu.hk/**"
 
-        print("[Login] Navigating to the login page...")
+        logging.info("[Login] Navigating to the login page...")
         await page.goto(login_url)
 
-        print("[Login] Filling in username and password...")
+        logging.info("[Login] Filling in username and password...")
         await page.fill('input[name="cred_userid_inputtext"]', SCOPUS_USERNAME)
         await page.fill('input[name="cred_password_inputtext"]', SCOPUS_PASSWORD)
 
-        print("[Login] Clicking the login button...")
+        logging.info("[Login] Clicking the login button...")
         await page.click('input[value="Login"]')
 
-        print("[Login] Waiting for redirect to Scopus EZproxy...")
+        logging.info("[Login] Waiting for redirect to Scopus EZproxy...")
         await page.wait_for_url(redirect_url_pattern, timeout=60000)
-        print(f"[Login] Redirected to: {page.url}")
+        logging.info(f"[Login] Redirected to: {page.url}")
 
         await page.close()
         return browser, context
@@ -80,14 +91,14 @@ class MiscitedDocumentScraper:
     def read_input_csv(self):
         """Load EIDs/Titles from CSV into a list of dicts."""
         if not Path(INPUT_CSV_PATH).exists():
-            print(f"CSV file '{INPUT_CSV_PATH}' not found.")
+            logging.error(f"CSV file '{INPUT_CSV_PATH}' not found.")
             return []
         rows = []
         with open(INPUT_CSV_PATH, "r", encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
                 rows.append(row)
-        print(f"Read {len(rows)} rows from {INPUT_CSV_PATH}.")
+        logging.info(f"Read {len(rows)} rows from {INPUT_CSV_PATH}.")
         return rows
 
     async def scrape_single_eid(self, context: BrowserContext, row: dict, sem: asyncio.Semaphore):
@@ -104,86 +115,84 @@ class MiscitedDocumentScraper:
             raw_title = row.get("Title", "")
             folder_path = Path(DOWNLOADS_DIR) / eid
 
-            # Check if folder already exists and has success/empty
-            if folder_path.exists():
-                success_file = folder_path / "success.txt"
-                empty_file = folder_path / "empty.txt"
-                if success_file.exists() or empty_file.exists():
-                    print(f"[{eid}] Folder has success/empty => skipping re-processing.")
-                    return
+            try:
+                # Check if folder already exists and has success/empty
+                if folder_path.exists():
+                    success_file = folder_path / "success.txt"
+                    empty_file = folder_path / "empty.txt"
+                    if success_file.exists() or empty_file.exists():
+                        logging.info(f"[{eid}] Folder has success/empty. Skipping re-processing.")
+                        return
+                    else:
+                        logging.info(f"[{eid}] Folder exists but no success/empty. Re-processing.")
                 else:
-                    print(f"[{eid}] Folder exists but no success/empty => re-processing.")
-            else:
-                print(f"[{eid}] Creating folder => {folder_path}")
-                folder_path.mkdir(parents=True, exist_ok=True)
+                    logging.info(f"[{eid}] Creating folder: {folder_path}")
+                    folder_path.mkdir(parents=True, exist_ok=True)
 
-            # Build the search URL using the parsed query
-            parsed_title = query_parser(raw_title, True)   # parse & lowercase => remove non-alnum
-            query_text = f'"{parsed_title}"'              # wrap in double-quotes
-            # Now put that into Scopus parameter => s=ALL("{parsed_title}")
-            search_url = (
-                "https://www-scopus-com.ezproxy.cityu.edu.hk/results/results.uri"
-                f"?sort=plf-f&src=dm&s=ALL%28{query_text}%29"
-                "&limit=10"
-                "&sessionSearchId=placeholder"
-                "&origin=searchbasic"
-                "&sdt=b"
-            )
+                # Build the search URL using the parsed query
+                parsed_title = query_parser(raw_title, True)
+                query_text = f'"{parsed_title}"'
+                search_url = (
+                    "https://www-scopus-com.ezproxy.cityu.edu.hk/results/results.uri"
+                    f"?sort=plf-f&src=dm&s=ALL%28{query_text}%29"
+                    "&limit=10"
+                    "&sessionSearchId=placeholder"
+                    "&origin=searchbasic"
+                    "&sdt=b"
+                )
 
-            page = await context.new_page()
-            print(f"[{eid}] Navigating to: {search_url}")
-            await page.goto(search_url, wait_until="networkidle")
+                page = await context.new_page()
+                logging.info(f"[{eid}] Navigating to: {search_url}")
+                await page.goto(search_url, wait_until="networkidle")
 
-            # Check if 0 documents => e.g. span[data-testid='no-results-with-suggestion']
-            no_results_found = False
-            try:
-                await page.wait_for_selector("span[data-testid='no-results-with-suggestion']", timeout=500)
-                no_results_found = True
-            except TimeoutError:
-                pass  # Means we didn't see the "no results" element => likely some results
+                # Check if 0 documents => e.g., span[data-testid='no-results-with-suggestion']
+                no_results_found = False
+                try:
+                    await page.wait_for_selector("span[data-testid='no-results-with-suggestion']", timeout=500)
+                    no_results_found = True
+                except TimeoutError:
+                    pass  # Means we didn't see the "no results" element => likely some results
 
-            if no_results_found:
-                empty_file = folder_path / "empty.txt"
-                empty_file.touch(exist_ok=True)
-                print(f"[{eid}] 0 documents => created empty.txt")
+                if no_results_found:
+                    empty_file = folder_path / "empty.txt"
+                    empty_file.touch(exist_ok=True)
+                    logging.info(f"[{eid}] 0 documents found. Created empty.txt.")
+                    await page.close()
+                    return
+
+                # Attempt the export
+                try:
+                    await page.locator("input[aria-label='Select all'][type='checkbox']").check()
+                    logging.info(f"[{eid}] 'Select all' checkbox checked.")
+
+                    await page.locator(".export-dropdown button").click()
+                    logging.info(f"[{eid}] Export menu opened.")
+
+                    await page.locator("button[data-testid='export-to-csv']").click()
+                    logging.info(f"[{eid}] 'Export to CSV' clicked.")
+
+                    # Wait for file download
+                    async with page.expect_download(timeout=0) as download_info:
+                        await page.locator("button[data-testid='submit-export-button']").click()
+                        logging.info(f"[{eid}] Export submitted.")
+                    download = await download_info.value
+
+                    # Save CSV
+                    csv_path = folder_path / f"{eid}.csv"
+                    await download.save_as(str(csv_path))
+                    logging.info(f"[{eid}] Downloaded CSV saved to {csv_path}.")
+
+                    # Mark success
+                    success_file = folder_path / "success.txt"
+                    success_file.touch(exist_ok=True)
+                    logging.info(f"[{eid}] Created success.txt.")
+                except Exception as e:
+                    logging.error(f"[{eid}] Error during export flow: {e}")
+                    # Folder remains with no success/empty => "fail" in final status
+
                 await page.close()
-                return
-
-            # Attempt the export
-            try:
-                # Check "Select all"
-                await page.locator("input[aria-label='Select all'][type='checkbox']").check()
-                print(f"[{eid}] 'Select all' checkbox checked.")
-
-                # Open export menu
-                await page.locator(".export-dropdown button").click()
-                print(f"[{eid}] Export menu opened.")
-
-                # Click "Export to CSV"
-                await page.locator("button[data-testid='export-to-csv']").click()
-                print(f"[{eid}] 'Export to CSV' clicked.")
-
-                # Wait for file download
-                async with page.expect_download(timeout=0) as download_info:
-                    await page.locator("button[data-testid='submit-export-button']").click()
-                    print(f"[{eid}] Export submitted.")
-                download = await download_info.value
-
-                # Save CSV
-                csv_path = folder_path / f"{eid}.csv"
-                await download.save_as(str(csv_path))
-                print(f"[{eid}] Downloaded CSV => {csv_path}")
-
-                # Mark success
-                success_file = folder_path / "success.txt"
-                success_file.touch(exist_ok=True)
-                print(f"[{eid}] Created success.txt")
-
             except Exception as e:
-                print(f"[{eid}] Error during export flow: {e}")
-                # Folder remains with no success/empty => "fail" in final status
-
-            await page.close()
+                logging.error(f"[{eid}] Unexpected error: {e}")
 
     async def run(self):
         """
@@ -214,14 +223,14 @@ class MiscitedDocumentScraper:
 
                 # After finishing this chunk => generate status.csv
                 self.generate_status_csv(rows)
-                print(f"[Chunk] Processed up to row {start_index + len(chunk)} / {total}.\n")
+                logging.info(f"[Chunk] Processed up to row {start_index + len(chunk)} / {total}.")
 
             await browser.close()
-            print("All chunks completed. Browser closed.")
+            logging.info("All chunks completed. Browser closed.")
 
         # One final status.csv at the end
         self.generate_status_csv(rows)
-        print("Final status.csv written.")
+        logging.info("Final status.csv written.")
 
     def generate_status_csv(self, rows):
         """
@@ -257,7 +266,7 @@ class MiscitedDocumentScraper:
             writer.writeheader()
             writer.writerows(statuses)
 
-        print(f"[Status] Wrote status.csv with {len(statuses)} entries => {status_csv_path}")
+        logging.info(f"[Status] Wrote {len(statuses)} rows to {status_csv_path}")
 
 
 if __name__ == "__main__":
