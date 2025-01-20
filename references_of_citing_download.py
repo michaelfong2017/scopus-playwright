@@ -23,9 +23,9 @@ SCOPUS_BASE_URL = os.getenv("SCOPUS_BASE_URL") if not SCOPUS_VIA_PROXY else os.g
 
 # Updated directory and file paths
 CITING_DOWNLOADS_DIR = "citing_downloads"
-REFERENCES_OF_CITING_DOWNLOADS_DIR = "references_of_citing_download"
+REFERENCES_OF_CITING_DOWNLOADS_DIR = "references_of_citing_downloads"
 OVERALL_REFERENCES_CSV = "overall_references_of_citing.csv"
-LOG_FILE_PATH = Path(REFERENCES_OF_CITING_DOWNLOADS_DIR) / "references_of_citing_download.log"
+LOG_FILE_PATH = Path(REFERENCES_OF_CITING_DOWNLOADS_DIR) / "references_of_citing_downloads.log"
 
 MAX_CONCURRENCY = 5
 CHUNK_SIZE = 100

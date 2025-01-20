@@ -30,6 +30,8 @@ python citing_download.py
 
 python combine.py
 
+python references_of_citing_download.py
+
 python filter.py
 ```
 
@@ -75,5 +77,5 @@ async with async_playwright() as playwright:
 - Login required
 - Store in a separate table
 - Browser emulation is preferred over using the AbstractRetrieval API for the same reasons explained when scraping the citing documents
-- citing_downloads/ -> references_of_citing_download/ + overall_references_of_citing.csv
-- references_of_citing_download/references_of_citing_download.log
+- citing_downloads/ -> references_of_citing_downloads/ + overall_references_of_citing.csv
+- references_of_citing_downloads/references_of_citing_downloads.log
