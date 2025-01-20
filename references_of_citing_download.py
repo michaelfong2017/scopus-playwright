@@ -149,7 +149,8 @@ class ReferencesOfCitingScraper:
                     # **NEW STEP: Check the number of references before proceeding**
                     try:
                         # Extract the text content
-                        page_title_text = await page.locator(".documentHeader span#pageTitleHeader").inner_text()
+                        pattern = re.compile(r'(\d+)\s+reference', re.IGNORECASE)
+                        page_title_text = await page.locator(".documentHeader span#pageTitleHeader", has_text=pattern).inner_text()
                         self.logger.info(f"[CitingEID: {citing_eid}] Page Title Text: '{page_title_text}'")
 
                         # Use regex to extract the number of references
