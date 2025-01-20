@@ -14,7 +14,7 @@ from login import LoginManager
 load_dotenv()
 
 SCOPUS_VIA_PROXY: bool = os.getenv("SCOPUS_VIA_PROXY")
-SCOPUS_BASE_URL = os.getenv("SCOPUS_BASE_URL_VIA_PROXY") if SCOPUS_VIA_PROXY else os.getenv("SCOPUS_BASE_URL")
+SCOPUS_BASE_URL = os.getenv("SCOPUS_BASE_URL_VIA_PROXY") if SCOPUS_VIA_PROXY == True else os.getenv("SCOPUS_BASE_URL")
 
 class ScopusScraper:
     def __init__(self, login_manager: LoginManager):
