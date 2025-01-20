@@ -19,7 +19,7 @@ import pandas as pd  # Ensure pandas is imported for generate_overall_csv
 load_dotenv()
 
 SCOPUS_VIA_PROXY: bool = os.getenv("SCOPUS_VIA_PROXY")
-SCOPUS_BASE_URL = os.getenv("SCOPUS_BASE_URL") if not SCOPUS_VIA_PROXY  else os.getenv("SCOPUS_BASE_URL_VIA_PROXY")
+SCOPUS_BASE_URL = os.getenv("SCOPUS_BASE_URL_VIA_PROXY") if SCOPUS_VIA_PROXY else os.getenv("SCOPUS_BASE_URL")
 
 # Updated directory and file paths
 CITING_DOWNLOADS_DIR = "citing_downloads"
