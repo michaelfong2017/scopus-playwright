@@ -70,7 +70,7 @@ async with async_playwright() as playwright:
 - Cited Article Title, Cited Article EID, Cited Article Link, Miscited Article Title, Miscited Article EID, Miscited Article Link, Citing Article Title, Citing Article EID, Citing Article Link
 - eid_with_titles.csv + miscited_downloads/ + citing_downloads/ -> miscitations_by_eid/ + overall_miscitations.csv
 
-## 5. (Coming Soon) Scrape the references of each citing document
+## 5. Scrape the references of each citing document
 - The purpose is to later check against F07 - Miscited article not found on reference list of citing article
 - Login required
 - Store in a separate table
