@@ -19,7 +19,7 @@ import pandas as pd  # Ensure pandas is imported for generate_overall_csv
 load_dotenv()
 
 SCOPUS_VIA_PROXY = os.getenv("SCOPUS_VIA_PROXY")
-SCOPUS_BASE_URL = os.getenv("SCOPUS_BASE_URL") if not SCOPUS_VIA_PROXY else os.getenv("SCOPUS_BASE_URL_VIA_PROXY")
+SCOPUS_BASE_URL = os.getenv("SCOPUS_BASE_URL") if not SCOPUS_VIA_PROXY == True else os.getenv("SCOPUS_BASE_URL_VIA_PROXY")
 
 # Updated directory and file paths
 CITING_DOWNLOADS_DIR = "citing_downloads"
@@ -102,7 +102,7 @@ class ReferencesOfCitingScraper:
             )
         )
 
-        if SCOPUS_VIA_PROXY:
+        if SCOPUS_VIA_PROXY == True:
             try:
                 cookies = await self.login_manager.relogin_and_reload_cookies()
                 await context.add_cookies(cookies)
