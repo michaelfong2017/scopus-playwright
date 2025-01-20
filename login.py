@@ -17,11 +17,10 @@ SCOPUS_USERNAME = os.getenv("SCOPUS_USERNAME")
 SCOPUS_PASSWORD = os.getenv("SCOPUS_PASSWORD")
 
 # The URL to go through the EZproxy login flow to reach Scopus
-LOGIN_URL = (
-    "https://lbapp01.lib.cityu.edu.hk/ezlogin/index.aspx?"
-    "url=https%3a%2f%2fwww.scopus.com"
-)
-REDIRECT_URL_PATTERN = "https://www-scopus-com.ezproxy.cityu.edu.hk/**"
+SCOPUS_VIA_PROXY: bool = os.getenv("SCOPUS_VIA_PROXY")
+SCOPUS_BASE_URL = os.getenv("SCOPUS_BASE_URL") if not SCOPUS_VIA_PROXY else os.getenv("SCOPUS_BASE_URL_VIA_PROXY")
+SCOPUS_LOGIN_URL = os.getenv("SCOPUS_LOGIN_URL") if not SCOPUS_VIA_PROXY else os.getenv("SCOPUS_LOGIN_URL_VIA_PROXY")
+SCOPUS_LOGIN_VIA_PROXY_REDIRECT_URL_PATTERN = os.getenv("SCOPUS_LOGIN_VIA_PROXY_REDIRECT_URL_PATTERN")
 
 # Default path to save cookies for later use in Requests
 DEFAULT_COOKIES_JSON_PATH = "cookies.json"
@@ -81,19 +80,23 @@ class LoginManager:
             page = await context.new_page()
 
             try:
-                self.logger.info("Navigating to the login page...")
-                await page.goto(LOGIN_URL)
+                if SCOPUS_VIA_PROXY:
+                    self.logger.info("Navigating to the Scopus login page via proxy...")
+                    await page.goto(SCOPUS_LOGIN_URL)
 
-                self.logger.info("Filling in the login form...")
-                await page.fill('input[name=cred_userid_inputtext]', SCOPUS_USERNAME)
-                await page.fill('input[name=cred_password_inputtext]', SCOPUS_PASSWORD)
+                    self.logger.info("Filling in the login form...")
+                    await page.fill('input[name=cred_userid_inputtext]', SCOPUS_USERNAME)
+                    await page.fill('input[name=cred_password_inputtext]', SCOPUS_PASSWORD)
 
-                self.logger.info("Submitting the login form...")
-                await page.click("css=input[value='Login']")
+                    self.logger.info("Submitting the login form...")
+                    await page.click("css=input[value='Login']")
 
-                self.logger.info("Waiting for redirect to the Scopus EZproxy URL...")
-                await page.wait_for_url(REDIRECT_URL_PATTERN, timeout=60000)
-                self.logger.info(f"Redirected to: {page.url}")
+                    self.logger.info("Waiting for redirect to the Scopus EZproxy URL...")
+                    await page.wait_for_url(SCOPUS_LOGIN_VIA_PROXY_REDIRECT_URL_PATTERN, timeout=60000)
+                    self.logger.info(f"Redirected to: {page.url}")
+                else:
+                    self.logger.info("Navigating to the Scopus home page...")
+                    await page.goto(SCOPUS_LOGIN_URL, wait_until="networkidle")
 
                 # Save cookies
                 cookies = await context.cookies()

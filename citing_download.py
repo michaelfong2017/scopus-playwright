@@ -16,8 +16,8 @@ from login import LoginManager  # Import LoginManager from login.py
 # Load environment variables
 load_dotenv()
 
-SCOPUS_VIA_PROXY = os.getenv("SCOPUS_VIA_PROXY")
-SCOPUS_BASE_URL = os.getenv("SCOPUS_BASE_URL") if not SCOPUS_VIA_PROXY == True else os.getenv("SCOPUS_BASE_URL_VIA_PROXY")
+SCOPUS_VIA_PROXY: bool = os.getenv("SCOPUS_VIA_PROXY")
+SCOPUS_BASE_URL = os.getenv("SCOPUS_BASE_URL") if not SCOPUS_VIA_PROXY else os.getenv("SCOPUS_BASE_URL_VIA_PROXY")
 
 MISCITED_DOWNLOADS_DIR = "miscited_downloads"
 CITING_DOWNLOADS_DIR = "citing_downloads"
@@ -86,15 +86,14 @@ class CitingDocumentsScraper:
             )
         )
 
-        if SCOPUS_VIA_PROXY == True:
-            try:
-                cookies = await self.login_manager.relogin_and_reload_cookies()
-                await context.add_cookies(cookies)
-                self.logger.info("Cookies added to Playwright context.")
+        try:
+            cookies = await self.login_manager.relogin_and_reload_cookies()
+            await context.add_cookies(cookies)
+            self.logger.info("Cookies added to Playwright context.")
 
-            except Exception as e:
-                self.logger.error(f"Error loading cookies: {e}")
-                raise
+        except Exception as e:
+            self.logger.error(f"Error loading cookies: {e}")
+            raise
 
         return browser, context
 

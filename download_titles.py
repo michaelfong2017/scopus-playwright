@@ -13,8 +13,8 @@ from login import LoginManager
 # Load environment variables
 load_dotenv()
 
-SCOPUS_VIA_PROXY = os.getenv("SCOPUS_VIA_PROXY")
-SCOPUS_BASE_URL = os.getenv("SCOPUS_BASE_URL") if not SCOPUS_VIA_PROXY == True else os.getenv("SCOPUS_BASE_URL_VIA_PROXY")
+SCOPUS_VIA_PROXY: bool = os.getenv("SCOPUS_VIA_PROXY")
+SCOPUS_BASE_URL = os.getenv("SCOPUS_BASE_URL") if not SCOPUS_VIA_PROXY else os.getenv("SCOPUS_BASE_URL_VIA_PROXY")
 
 class ScopusScraper:
     def __init__(self, login_manager: LoginManager):
@@ -47,8 +47,7 @@ class ScopusScraper:
         """
         Re-logins using LoginManager if enough time has passed since last re-login.
         """
-        if SCOPUS_VIA_PROXY == True:
-            await self.login_manager.relogin_and_reload_cookies()
+        await self.login_manager.relogin_and_reload_cookies()
 
     ######################################################
     # 2) LOAD EXISTING OUTPUT (IF ANY)
@@ -87,15 +86,9 @@ class ScopusScraper:
             for attempt in range(1, 6):
                 try:
                     loop = asyncio.get_running_loop()
-                    if SCOPUS_VIA_PROXY == True:
-                        response = await loop.run_in_executor(
-                            None,
-                            partial(self.login_manager.get_session().get, url, timeout=10)
-                        )
-                    else:
-                        response = await loop.run_in_executor(
+                    response = await loop.run_in_executor(
                         None,
-                        partial(self.login_manager.session.get, url, timeout=10)
+                        partial(self.login_manager.get_session().get, url, timeout=10)
                     )
                     last_status = response.status_code
 
@@ -243,9 +236,8 @@ class ScopusScraper:
         4. Re-login on 403, but only if cooldown has passed.
         5. If 404 after all attempts => '404 Not Found' in Title.
         """
-        if SCOPUS_VIA_PROXY == True:
-            # Ensure logged in
-            await self.login_manager.ensure_logged_in()
+        # Ensure logged in
+        await self.login_manager.ensure_logged_in()
 
         # Load existing data from output_csv (if any)
         self.load_existing_output_csv()
