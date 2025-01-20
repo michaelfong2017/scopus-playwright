@@ -31,8 +31,8 @@ class ScopusScraper:
         self.output_csv_path = "eid_with_titles.csv"
 
         # Concurrency and chunk settings
-        self.concurrency = 20
-        self.chunk_size = 100
+        self.concurrency = int(os.getenv("REQUESTS_MAX_CONCURRENCY"))
+        self.chunk_size = int(os.getenv("CHUNK_SIZE"))
 
         # We'll store {EID -> row_dict} for final output
         self.output_data_dict = {}

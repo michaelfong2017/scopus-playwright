@@ -22,8 +22,8 @@ SCOPUS_BASE_URL = os.getenv("SCOPUS_BASE_URL_VIA_PROXY") if SCOPUS_VIA_PROXY els
 INPUT_CSV_PATH = "eid_with_titles.csv"   # Must have columns: EID, Title
 DOWNLOADS_DIR = "miscited_downloads"     # Root folder for all EID folders
 LOG_FILE_PATH = Path(DOWNLOADS_DIR) / "miscited_downloads.log"  # Single log file
-MAX_CONCURRENCY = 5                     # Number of concurrent pages
-CHUNK_SIZE = 100                        # Update status.csv after every 100 EIDs
+MAX_CONCURRENCY = int(os.getenv("BROWSER_MAX_CONCURRENCY")) # Number of concurrent pages
+CHUNK_SIZE = int(os.getenv("CHUNK_SIZE"))   # Update status.csv after every 100 EIDs
 
 # Configure global logging
 LOG_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)

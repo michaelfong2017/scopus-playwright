@@ -27,8 +27,8 @@ REFERENCES_OF_CITING_DOWNLOADS_DIR = "references_of_citing_downloads"
 OVERALL_REFERENCES_CSV = "overall_references_of_citing.csv"
 LOG_FILE_PATH = Path(REFERENCES_OF_CITING_DOWNLOADS_DIR) / "references_of_citing_downloads.log"
 
-MAX_CONCURRENCY = 5
-CHUNK_SIZE = 100
+MAX_CONCURRENCY = int(os.getenv("BROWSER_MAX_CONCURRENCY")) # Number of concurrent pages
+CHUNK_SIZE = int(os.getenv("CHUNK_SIZE"))   # Update status.csv after every 100 EIDs
 
 # Configure global logging
 LOG_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)

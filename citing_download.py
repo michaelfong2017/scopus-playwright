@@ -22,8 +22,8 @@ SCOPUS_BASE_URL = os.getenv("SCOPUS_BASE_URL_VIA_PROXY") if SCOPUS_VIA_PROXY els
 MISCITED_DOWNLOADS_DIR = "miscited_downloads"
 CITING_DOWNLOADS_DIR = "citing_downloads"
 LOG_FILE_PATH = Path(CITING_DOWNLOADS_DIR) / "citing_downloads.log"
-MAX_CONCURRENCY = 5
-CHUNK_SIZE = 100
+MAX_CONCURRENCY = int(os.getenv("BROWSER_MAX_CONCURRENCY")) # Number of concurrent pages
+CHUNK_SIZE = int(os.getenv("CHUNK_SIZE"))   # Update status.csv after every 100 EIDs
 
 # Configure global logging
 LOG_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
