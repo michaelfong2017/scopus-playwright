@@ -27,6 +27,10 @@ python download_titles.py
 python miscited_download.py
 
 python citing_download.py
+
+python combine.py
+
+python filter.py
 ```
 
 # Using a persistent Chrome window instead
