@@ -16,8 +16,8 @@ from login import LoginManager  # Import LoginManager from login.py
 # Load environment variables
 load_dotenv()
 
-SCOPUS_USERNAME = os.getenv("SCOPUS_USERNAME")
-SCOPUS_PASSWORD = os.getenv("SCOPUS_PASSWORD")
+SCOPUS_VIA_PROXY = os.getenv("SCOPUS_VIA_PROXY")
+SCOPUS_BASE_URL = os.getenv("SCOPUS_BASE_URL") if not SCOPUS_VIA_PROXY else os.getenv("SCOPUS_BASE_URL_VIA_PROXY")
 
 MISCITED_DOWNLOADS_DIR = "miscited_downloads"
 CITING_DOWNLOADS_DIR = "citing_downloads"
@@ -40,9 +40,6 @@ class CitingDocumentsScraper:
     def __init__(self, login_manager: LoginManager):
         # Initialize logger for this module
         self.logger = logging.getLogger(__name__)
-
-        if not SCOPUS_USERNAME or not SCOPUS_PASSWORD:
-            raise ValueError("SCOPUS_USERNAME or SCOPUS_PASSWORD not set in environment.")
         
         self.all_pairs = []
 
@@ -89,14 +86,15 @@ class CitingDocumentsScraper:
             )
         )
 
-        try:
-            cookies = await self.login_manager.relogin_and_reload_cookies()
-            await context.add_cookies(cookies)
-            self.logger.info("Cookies added to Playwright context.")
+        if SCOPUS_VIA_PROXY:
+            try:
+                cookies = await self.login_manager.relogin_and_reload_cookies()
+                await context.add_cookies(cookies)
+                self.logger.info("Cookies added to Playwright context.")
 
-        except Exception as e:
-            self.logger.error(f"Error loading cookies: {e}")
-            raise
+            except Exception as e:
+                self.logger.error(f"Error loading cookies: {e}")
+                raise
 
         return browser, context
 
@@ -123,7 +121,7 @@ class CitingDocumentsScraper:
 
                 # Build the "cited by" URL
                 citedby_url = (
-                    "https://www-scopus-com.ezproxy.cityu.edu.hk/search/submit/citedby.uri"
+                    f"{SCOPUS_BASE_URL}search/submit/citedby.uri"
                     f"?eid={miscited_eid}&src=s&origin=resultslist"
                 )
 

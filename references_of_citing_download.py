@@ -18,8 +18,8 @@ import pandas as pd  # Ensure pandas is imported for generate_overall_csv
 # Load environment variables
 load_dotenv()
 
-SCOPUS_USERNAME = os.getenv("SCOPUS_USERNAME")
-SCOPUS_PASSWORD = os.getenv("SCOPUS_PASSWORD")
+SCOPUS_VIA_PROXY = os.getenv("SCOPUS_VIA_PROXY")
+SCOPUS_BASE_URL = os.getenv("SCOPUS_BASE_URL") if not SCOPUS_VIA_PROXY else os.getenv("SCOPUS_BASE_URL_VIA_PROXY")
 
 # Updated directory and file paths
 CITING_DOWNLOADS_DIR = "citing_downloads"
@@ -46,9 +46,6 @@ class ReferencesOfCitingScraper:
         # Initialize logger for this module
         self.logger = logging.getLogger(__name__)
 
-        if not SCOPUS_USERNAME or not SCOPUS_PASSWORD:
-            raise ValueError("SCOPUS_USERNAME or SCOPUS_PASSWORD not set in environment.")
-        
         self.citing_articles = []  # List to store citing article details
 
         self.login_manager = login_manager
@@ -105,14 +102,15 @@ class ReferencesOfCitingScraper:
             )
         )
 
-        try:
-            cookies = await self.login_manager.relogin_and_reload_cookies()
-            await context.add_cookies(cookies)
-            self.logger.info("Cookies added to Playwright context.")
+        if SCOPUS_VIA_PROXY:
+            try:
+                cookies = await self.login_manager.relogin_and_reload_cookies()
+                await context.add_cookies(cookies)
+                self.logger.info("Cookies added to Playwright context.")
 
-        except Exception as e:
-            self.logger.error(f"Error loading cookies: {e}")
-            raise
+            except Exception as e:
+                self.logger.error(f"Error loading cookies: {e}")
+                raise
 
         return browser, context
 
@@ -140,7 +138,7 @@ class ReferencesOfCitingScraper:
 
                 # Build the "references of citing" URL
                 references_url = (
-                    "https://www-scopus-com.ezproxy.cityu.edu.hk/results/references.uri"
+                    f"{SCOPUS_BASE_URL}results/references.uri"
                     f"?src=r&sot=rec&s=CITEID({citing_eid.split('-')[2]})&citingId={citing_eid}"
                 )
 

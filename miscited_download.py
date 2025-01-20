@@ -16,8 +16,8 @@ from login import LoginManager  # Import LoginManager from login.py
 # Load environment variables
 load_dotenv()
 
-SCOPUS_USERNAME = os.getenv("SCOPUS_USERNAME")
-SCOPUS_PASSWORD = os.getenv("SCOPUS_PASSWORD")
+SCOPUS_VIA_PROXY = os.getenv("SCOPUS_VIA_PROXY")
+SCOPUS_BASE_URL = os.getenv("SCOPUS_BASE_URL") if not SCOPUS_VIA_PROXY else os.getenv("SCOPUS_BASE_URL_VIA_PROXY")
 
 INPUT_CSV_PATH = "eid_with_titles.csv"   # Must have columns: EID, Title
 DOWNLOADS_DIR = "miscited_downloads"     # Root folder for all EID folders
@@ -45,9 +45,6 @@ class MiscitedDocumentScraper:
     def __init__(self, login_manager: LoginManager):
         # Initialize logger for this module
         self.logger = logging.getLogger(__name__)
-
-        if not SCOPUS_USERNAME or not SCOPUS_PASSWORD:
-            raise ValueError("SCOPUS_USERNAME or SCOPUS_PASSWORD not set in environment.")
         
         self.login_manager = login_manager
 
@@ -66,14 +63,15 @@ class MiscitedDocumentScraper:
             )
         )
 
-        try:
-            cookies = await self.login_manager.relogin_and_reload_cookies()
-            await context.add_cookies(cookies)
-            self.logger.info("Cookies added to Playwright context.")
+        if SCOPUS_VIA_PROXY:
+            try:
+                cookies = await self.login_manager.relogin_and_reload_cookies()
+                await context.add_cookies(cookies)
+                self.logger.info("Cookies added to Playwright context.")
 
-        except Exception as e:
-            self.logger.error(f"Error loading cookies: {e}")
-            raise
+            except Exception as e:
+                self.logger.error(f"Error loading cookies: {e}")
+                raise
 
         return browser, context
 
@@ -122,7 +120,7 @@ class MiscitedDocumentScraper:
                 parsed_title = query_parser(raw_title, True)
                 query_text = f'"{parsed_title}"'
                 search_url = (
-                    "https://www-scopus-com.ezproxy.cityu.edu.hk/results/results.uri"
+                    f"{SCOPUS_BASE_URL}results/results.uri"
                     f"?sort=plf-f&src=dm&s=ALL%28{query_text}%29"
                     "&limit=10"
                     "&sessionSearchId=placeholder"

@@ -13,8 +13,8 @@ from requests.cookies import RequestsCookieJar
 # Load environment variables (SCOPUS_USERNAME, SCOPUS_PASSWORD)
 load_dotenv()
 
-USERNAME = os.getenv("SCOPUS_USERNAME")
-PASSWORD = os.getenv("SCOPUS_PASSWORD")
+SCOPUS_USERNAME = os.getenv("SCOPUS_USERNAME")
+SCOPUS_PASSWORD = os.getenv("SCOPUS_PASSWORD")
 
 # The URL to go through the EZproxy login flow to reach Scopus
 LOGIN_URL = (
@@ -64,7 +64,7 @@ class LoginManager:
         """
         Logs into Scopus via EZproxy using Playwright, then saves cookies to self.cookies_json_path.
         """
-        if not USERNAME or not PASSWORD:
+        if not SCOPUS_USERNAME or not SCOPUS_PASSWORD:
             self.logger.error("Environment variables SCOPUS_USERNAME or SCOPUS_PASSWORD not set.")
             raise ValueError("Environment variables SCOPUS_USERNAME or SCOPUS_PASSWORD not set.")
 
@@ -85,8 +85,8 @@ class LoginManager:
                 await page.goto(LOGIN_URL)
 
                 self.logger.info("Filling in the login form...")
-                await page.fill('input[name=cred_userid_inputtext]', USERNAME)
-                await page.fill('input[name=cred_password_inputtext]', PASSWORD)
+                await page.fill('input[name=cred_userid_inputtext]', SCOPUS_USERNAME)
+                await page.fill('input[name=cred_password_inputtext]', SCOPUS_PASSWORD)
 
                 self.logger.info("Submitting the login form...")
                 await page.click("css=input[value='Login']")

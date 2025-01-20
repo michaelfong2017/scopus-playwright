@@ -1,12 +1,20 @@
+import os
 import csv
 import asyncio
 import logging
 from functools import partial
 from json.decoder import JSONDecodeError
 from pathlib import Path
+from dotenv import load_dotenv
 
 # Import the LoginManager from login.py
 from login import LoginManager
+
+# Load environment variables
+load_dotenv()
+
+SCOPUS_VIA_PROXY = os.getenv("SCOPUS_VIA_PROXY")
+SCOPUS_BASE_URL = os.getenv("SCOPUS_BASE_URL") if not SCOPUS_VIA_PROXY else os.getenv("SCOPUS_BASE_URL_VIA_PROXY")
 
 class ScopusScraper:
     def __init__(self, login_manager: LoginManager):
@@ -15,7 +23,7 @@ class ScopusScraper:
 
         # Paths and URLs
         self.base_doc_url = (
-            "https://www-scopus-com.ezproxy.cityu.edu.hk/gateway/doc-details/documents/"
+            f"{SCOPUS_BASE_URL}gateway/doc-details/documents/"
         )
 
         # CSV input and output
@@ -39,7 +47,8 @@ class ScopusScraper:
         """
         Re-logins using LoginManager if enough time has passed since last re-login.
         """
-        await self.login_manager.relogin_and_reload_cookies()
+        if SCOPUS_VIA_PROXY:
+            await self.login_manager.relogin_and_reload_cookies()
 
     ######################################################
     # 2) LOAD EXISTING OUTPUT (IF ANY)
@@ -228,8 +237,9 @@ class ScopusScraper:
         4. Re-login on 403, but only if cooldown has passed.
         5. If 404 after all attempts => '404 Not Found' in Title.
         """
-        # Ensure logged in
-        await self.login_manager.ensure_logged_in()
+        if SCOPUS_VIA_PROXY:
+            # Ensure logged in
+            await self.login_manager.ensure_logged_in()
 
         # Load existing data from output_csv (if any)
         self.load_existing_output_csv()
