@@ -87,9 +87,15 @@ class ScopusScraper:
             for attempt in range(1, 6):
                 try:
                     loop = asyncio.get_running_loop()
-                    response = await loop.run_in_executor(
+                    if SCOPUS_VIA_PROXY == True:
+                        response = await loop.run_in_executor(
+                            None,
+                            partial(self.login_manager.get_session().get, url, timeout=10)
+                        )
+                    else:
+                        response = await loop.run_in_executor(
                         None,
-                        partial(self.login_manager.get_session().get, url, timeout=10)
+                        partial(self.login_manager.session.get, url, timeout=10)
                     )
                     last_status = response.status_code
 
