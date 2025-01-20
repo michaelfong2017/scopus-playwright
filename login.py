@@ -17,8 +17,8 @@ SCOPUS_USERNAME = os.getenv("SCOPUS_USERNAME")
 SCOPUS_PASSWORD = os.getenv("SCOPUS_PASSWORD")
 
 # The URL to go through the EZproxy login flow to reach Scopus
-SCOPUS_VIA_PROXY: bool = os.getenv("SCOPUS_VIA_PROXY")
-SCOPUS_LOGIN_URL = os.getenv("SCOPUS_LOGIN_URL_VIA_PROXY") if SCOPUS_VIA_PROXY == True else os.getenv("SCOPUS_LOGIN_URL")
+SCOPUS_VIA_PROXY = os.getenv("SCOPUS_VIA_PROXY").lower() in ('true', '1', 't')
+SCOPUS_LOGIN_URL = os.getenv("SCOPUS_LOGIN_URL_VIA_PROXY") if SCOPUS_VIA_PROXY else os.getenv("SCOPUS_LOGIN_URL")
 SCOPUS_LOGIN_VIA_PROXY_REDIRECT_URL_PATTERN = os.getenv("SCOPUS_LOGIN_VIA_PROXY_REDIRECT_URL_PATTERN")
 
 # Default path to save cookies for later use in Requests

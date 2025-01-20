@@ -16,8 +16,8 @@ from login import LoginManager  # Import LoginManager from login.py
 # Load environment variables
 load_dotenv()
 
-SCOPUS_VIA_PROXY: bool = os.getenv("SCOPUS_VIA_PROXY")
-SCOPUS_BASE_URL = os.getenv("SCOPUS_BASE_URL_VIA_PROXY") if SCOPUS_VIA_PROXY == True else os.getenv("SCOPUS_BASE_URL")
+SCOPUS_VIA_PROXY = os.getenv("SCOPUS_VIA_PROXY").lower() in ('true', '1', 't')
+SCOPUS_BASE_URL = os.getenv("SCOPUS_BASE_URL_VIA_PROXY") if SCOPUS_VIA_PROXY else os.getenv("SCOPUS_BASE_URL")
 
 INPUT_CSV_PATH = "eid_with_titles.csv"   # Must have columns: EID, Title
 DOWNLOADS_DIR = "miscited_downloads"     # Root folder for all EID folders
